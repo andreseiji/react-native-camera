@@ -12,6 +12,20 @@ import android.util.Base64;
 import org.reactnative.camera.RNCameraViewHelper;
 import org.reactnative.camera.utils.RNFileUtils;
 
+// XXX: Custom code for Firebase Face Detection image analysis
+import android.util.Log;
+
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.firebase.ml.vision.FirebaseVision;
+import com.google.firebase.ml.vision.common.FirebaseVisionImage;
+import com.google.firebase.ml.vision.face.FirebaseVisionFace;
+import com.google.firebase.ml.vision.face.FirebaseVisionFaceDetector;
+import com.google.firebase.ml.vision.face.FirebaseVisionFaceDetectorOptions;
+
+import com.facebook.react.bridge.WritableArray;
+// XXX: Custom code for Firebase Face Detection image analysis
+
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReadableMap;
@@ -22,6 +36,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+
+// XXX: Custom code for Firebase Face Detection image analysis
+import java.util.List;
+import org.reactnative.facedetector.FaceDetectorUtils;
+// XXX: Custom code for Firebase Face Detection image analysis
 
 public class ResolveTakenPictureAsyncTask extends AsyncTask<Void, Void, WritableMap> {
     private static final String ERROR_TAG = "E_TAKING_PICTURE_FAILED";
@@ -48,7 +67,9 @@ public class ResolveTakenPictureAsyncTask extends AsyncTask<Void, Void, Writable
 
     @Override
     protected WritableMap doInBackground(Void... voids) {
-        WritableMap response = Arguments.createMap();
+        // XXX: Custom code for Firebase Face Detection image analysis
+        final WritableMap response = Arguments.createMap();
+        // XXX: Custom code for Firebase Face Detection image analysis
         ByteArrayInputStream inputStream = null;
 
         response.putInt("deviceOrientation", mDeviceOrientation);
@@ -75,6 +96,48 @@ public class ResolveTakenPictureAsyncTask extends AsyncTask<Void, Void, Writable
                 // Return file system URI
                 String fileUri = Uri.fromFile(imageFile).toString();
                 response.putString("uri", fileUri);
+
+                // XXX: Custom code for Firebase Face Detection image analysis
+                FirebaseVisionFaceDetectorOptions fbOptions = new FirebaseVisionFaceDetectorOptions.Builder()
+                    .setPerformanceMode(FirebaseVisionFaceDetectorOptions.FAST)
+                    .setLandmarkMode(
+                        FirebaseVisionFaceDetectorOptions.ALL_LANDMARKS)      
+                    .setClassificationMode(
+                        FirebaseVisionFaceDetectorOptions.ALL_CLASSIFICATIONS)
+                    .setMinFaceSize(0.15f)
+                    .build();
+
+                FirebaseVisionImage fbImage = FirebaseVisionImage.fromBitmap(mBitmap);
+
+                FirebaseVisionFaceDetector fbDetector = FirebaseVision.getInstance()
+                    .getVisionFaceDetector(fbOptions);
+
+                fbDetector.detectInImage(fbImage)
+                    .addOnSuccessListener(
+                        new OnSuccessListener<List<FirebaseVisionFace>>() {
+                            @Override
+                            public void onSuccess(List<FirebaseVisionFace> faces) {
+                                WritableArray facesArray = Arguments.createArray();
+
+                                for (FirebaseVisionFace face : faces) {
+                                    WritableMap encodedFace = FaceDetectorUtils.serializeFace(face);
+                                    encodedFace.putDouble("yawAngle", (-encodedFace.getDouble("yawAngle") + 360) % 360);
+                                    encodedFace.putDouble("rollAngle", (-encodedFace.getDouble("rollAngle") + 360) % 360);
+                                    facesArray.pushMap(encodedFace);
+                                }
+                                
+                                // response.putArray("faces", facesArray);
+                            }
+                    })
+                    .addOnFailureListener(
+                        new OnFailureListener() {
+                            @Override
+                            public void onFailure(Exception e) {
+                                Log.e(ERROR_TAG, "Face recognition task failed", e);
+                                mPromise.reject(ERROR_TAG, "Face recognition task failed", e);
+                            }
+                    });
+                // XXX: Custom code for Firebase Face Detection image analysis
 
             } catch (Resources.NotFoundException e) {
                 mPromise.reject(ERROR_TAG, "Documents directory of the app could not be found.", e);
